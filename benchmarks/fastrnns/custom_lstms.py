@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import Parameter
-import torch.jit as jit
+# import torch.jit as jit
 import warnings
 from collections import namedtuple
 from typing import List, Tuple
@@ -91,7 +91,7 @@ def reverse(lst):
     return lst[::-1]
 
 
-class LSTMCell(jit.ScriptModule):
+class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(LSTMCell, self).__init__()
         self.input_size = input_size
@@ -101,7 +101,6 @@ class LSTMCell(jit.ScriptModule):
         self.bias_ih = Parameter(torch.randn(4 * hidden_size))
         self.bias_hh = Parameter(torch.randn(4 * hidden_size))
 
-    @jit.script_method
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
@@ -117,10 +116,14 @@ class LSTMCell(jit.ScriptModule):
         cy = (forgetgate * cx) + (ingate * cellgate)
         hy = outgate * torch.tanh(cy)
 
-        return hy, (hy, cy)
+        return hy, (hy, cy), [ingate.detach().cpu().numpy(), 
+        forgetgate.detach().cpu().numpy(), 
+        cellgate.detach().cpu().numpy(), 
+        outgate.detach().cpu().numpy(), 
+        cy.detach().cpu().numpy(), hy.detach().cpu().numpy()]
 
 
-class LayerNorm(jit.ScriptModule):
+class LayerNorm(nn.Module):
     def __init__(self, normalized_shape):
         super(LayerNorm, self).__init__()
         if isinstance(normalized_shape, numbers.Integral):
@@ -134,19 +137,17 @@ class LayerNorm(jit.ScriptModule):
         self.bias = Parameter(torch.zeros(normalized_shape))
         self.normalized_shape = normalized_shape
 
-    @jit.script_method
     def compute_layernorm_stats(self, input):
         mu = input.mean(-1, keepdim=True)
         sigma = input.std(-1, keepdim=True, unbiased=False)
         return mu, sigma
 
-    @jit.script_method
     def forward(self, input):
         mu, sigma = self.compute_layernorm_stats(input)
         return (input - mu) / sigma * self.weight + self.bias
 
 
-class LayerNormLSTMCell(jit.ScriptModule):
+class LayerNormLSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size, decompose_layernorm=False):
         super(LayerNormLSTMCell, self).__init__()
         self.input_size = input_size
@@ -164,7 +165,6 @@ class LayerNormLSTMCell(jit.ScriptModule):
         self.layernorm_h = ln(4 * hidden_size)
         self.layernorm_c = ln(hidden_size)
 
-    @jit.script_method
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
@@ -184,39 +184,39 @@ class LayerNormLSTMCell(jit.ScriptModule):
         return hy, (hy, cy)
 
 
-class LSTMLayer(jit.ScriptModule):
+class LSTMLayer(nn.Module):
     def __init__(self, cell, *cell_args):
         super(LSTMLayer, self).__init__()
         self.cell = cell(*cell_args)
 
-    @jit.script_method
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         inputs = input.unbind(0)
-        outputs = torch.jit.annotate(List[Tensor], [])
+        outputs = []
+        profile_state = []
         for i in range(len(inputs)):
-            out, state = self.cell(inputs[i], state)
+            out, state, pstate = self.cell(inputs[i], state)
             outputs += [out]
-        return torch.stack(outputs), state
+            profile_state.append(pstate)
+        return torch.stack(outputs), state, profile_state
 
 
-class ReverseLSTMLayer(jit.ScriptModule):
+class ReverseLSTMLayer(nn.Module):
     def __init__(self, cell, *cell_args):
         super(ReverseLSTMLayer, self).__init__()
         self.cell = cell(*cell_args)
 
-    @jit.script_method
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         inputs = reverse(input.unbind(0))
-        outputs = jit.annotate(List[Tensor], [])
+        outputs = []
         for i in range(len(inputs)):
             out, state = self.cell(inputs[i], state)
             outputs += [out]
         return torch.stack(reverse(outputs)), state
 
 
-class BidirLSTMLayer(jit.ScriptModule):
+class BidirLSTMLayer(nn.Module):
     __constants__ = ['directions']
 
     def __init__(self, cell, *cell_args):
@@ -226,12 +226,11 @@ class BidirLSTMLayer(jit.ScriptModule):
             ReverseLSTMLayer(cell, *cell_args),
         ])
 
-    @jit.script_method
     def forward(self, input, states):
         # type: (Tensor, List[Tuple[Tensor, Tensor]]) -> Tuple[Tensor, List[Tuple[Tensor, Tensor]]]
         # List[LSTMState]: [forward LSTMState, backward LSTMState]
-        outputs = jit.annotate(List[Tensor], [])
-        output_states = jit.annotate(List[Tuple[Tensor, Tensor]], [])
+        outputs = []
+        output_states = []
         # XXX: enumerate https://github.com/pytorch/pytorch/issues/14471
         i = 0
         for direction in self.directions:
@@ -249,7 +248,7 @@ def init_stacked_lstm(num_layers, layer, first_layer_args, other_layer_args):
     return nn.ModuleList(layers)
 
 
-class StackedLSTM(jit.ScriptModule):
+class StackedLSTM(nn.Module):
     __constants__ = ['layers']  # Necessary for iterating through self.layers
 
     def __init__(self, num_layers, layer, first_layer_args, other_layer_args):
@@ -257,27 +256,28 @@ class StackedLSTM(jit.ScriptModule):
         self.layers = init_stacked_lstm(num_layers, layer, first_layer_args,
                                         other_layer_args)
 
-    @jit.script_method
     def forward(self, input, states):
         # type: (Tensor, List[Tuple[Tensor, Tensor]]) -> Tuple[Tensor, List[Tuple[Tensor, Tensor]]]
         # List[LSTMState]: One state per layer
-        output_states = jit.annotate(List[Tuple[Tensor, Tensor]], [])
+        output_states = []
         output = input
+        profile_state = []
         # XXX: enumerate https://github.com/pytorch/pytorch/issues/14471
         i = 0
         for rnn_layer in self.layers:
             state = states[i]
-            output, out_state = rnn_layer(output, state)
+            output, out_state, pstate = rnn_layer(output, state)
             output_states += [out_state]
+            profile_state.append(pstate)
             i += 1
-        return output, output_states
+        return output, output_states, profile_state
 
 
 # Differs from StackedLSTM in that its forward method takes
 # List[List[Tuple[Tensor,Tensor]]]. It would be nice to subclass StackedLSTM
 # except we don't support overriding script methods.
 # https://github.com/pytorch/pytorch/issues/10733
-class StackedLSTM2(jit.ScriptModule):
+class StackedLSTM2(nn.Module):
     __constants__ = ['layers']  # Necessary for iterating through self.layers
 
     def __init__(self, num_layers, layer, first_layer_args, other_layer_args):
@@ -285,12 +285,11 @@ class StackedLSTM2(jit.ScriptModule):
         self.layers = init_stacked_lstm(num_layers, layer, first_layer_args,
                                         other_layer_args)
 
-    @jit.script_method
     def forward(self, input, states):
         # type: (Tensor, List[List[Tuple[Tensor, Tensor]]]) -> Tuple[Tensor, List[List[Tuple[Tensor, Tensor]]]]
         # List[List[LSTMState]]: The outer list is for layers,
         #                        inner list is for directions.
-        output_states = jit.annotate(List[List[Tuple[Tensor, Tensor]]], [])
+        output_states = []
         output = input
         # XXX: enumerate https://github.com/pytorch/pytorch/issues/14471
         i = 0
@@ -302,7 +301,7 @@ class StackedLSTM2(jit.ScriptModule):
         return output, output_states
 
 
-class StackedLSTMWithDropout(jit.ScriptModule):
+class StackedLSTMWithDropout(nn.Module):
     # Necessary for iterating through self.layers and dropout support
     __constants__ = ['layers', 'num_layers']
 
@@ -321,11 +320,10 @@ class StackedLSTMWithDropout(jit.ScriptModule):
 
         self.dropout_layer = nn.Dropout(0.4)
 
-    @jit.script_method
     def forward(self, input, states):
         # type: (Tensor, List[Tuple[Tensor, Tensor]]) -> Tuple[Tensor, List[Tuple[Tensor, Tensor]]]
         # List[LSTMState]: One state per layer
-        output_states = jit.annotate(List[Tuple[Tensor, Tensor]], [])
+        output_states = []
         output = input
         # XXX: enumerate https://github.com/pytorch/pytorch/issues/14471
         i = 0
@@ -357,7 +355,7 @@ def test_script_rnn_layer(seq_len, batch, input_size, hidden_size):
     state = LSTMState(torch.randn(batch, hidden_size),
                       torch.randn(batch, hidden_size))
     rnn = LSTMLayer(LSTMCell, input_size, hidden_size)
-    out, out_state = rnn(inp, state)
+    out, out_state, _ = rnn(inp, state)
 
     # Control: pytorch native LSTM
     lstm = nn.LSTM(input_size, hidden_size, 1)
@@ -380,7 +378,7 @@ def test_script_stacked_rnn(seq_len, batch, input_size, hidden_size,
                         torch.randn(batch, hidden_size))
               for _ in range(num_layers)]
     rnn = script_lstm(input_size, hidden_size, num_layers)
-    out, out_state = rnn(inp, states)
+    out, out_state, _ = rnn(inp, states)
     custom_state = flatten_states(out_state)
 
     # Control: pytorch native LSTM
@@ -408,7 +406,7 @@ def test_script_stacked_bidir_rnn(seq_len, batch, input_size, hidden_size,
                for _ in range(2)]
               for _ in range(num_layers)]
     rnn = script_lstm(input_size, hidden_size, num_layers, bidirectional=True)
-    out, out_state = rnn(inp, states)
+    out, out_state, _ = rnn(inp, states)
     custom_state = double_flatten_states(out_state)
 
     # Control: pytorch native LSTM
@@ -439,7 +437,7 @@ def test_script_stacked_lstm_dropout(seq_len, batch, input_size, hidden_size,
     rnn = script_lstm(input_size, hidden_size, num_layers, dropout=True)
 
     # just a smoke test
-    out, out_state = rnn(inp, states)
+    out, out_state, _ = rnn(inp, states)
 
 
 def test_script_stacked_lnlstm(seq_len, batch, input_size, hidden_size,
@@ -451,11 +449,11 @@ def test_script_stacked_lnlstm(seq_len, batch, input_size, hidden_size,
     rnn = script_lnlstm(input_size, hidden_size, num_layers)
 
     # just a smoke test
-    out, out_state = rnn(inp, states)
+    out, out_state, _ = rnn(inp, states)
 
 
-test_script_rnn_layer(5, 2, 3, 7)
-test_script_stacked_rnn(5, 2, 3, 7, 4)
-test_script_stacked_bidir_rnn(5, 2, 3, 7, 4)
-test_script_stacked_lstm_dropout(5, 2, 3, 7, 4)
-test_script_stacked_lnlstm(5, 2, 3, 7, 4)
+# test_script_rnn_layer(5, 2, 3, 7)
+# test_script_stacked_rnn(5, 2, 3, 7, 4)
+# test_script_stacked_bidir_rnn(5, 2, 3, 7, 4)
+# test_script_stacked_lstm_dropout(5, 2, 3, 7, 4)
+# test_script_stacked_lnlstm(5, 2, 3, 7, 4)
