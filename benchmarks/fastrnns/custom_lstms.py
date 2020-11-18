@@ -116,7 +116,7 @@ class LSTMCell(nn.Module):
 
 
         def helper_weight(cell, arr, grad):
-            arr.append(grad)
+            arr.append(grad.cpu())
             if len(cell.ih_step) == 200 and  \
                 len(cell.ih_bias_step) == 200 and  \
                 len(cell.ih) >= 1 and \
@@ -164,8 +164,8 @@ class LSTMCell(nn.Module):
         gates = (ih + hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
         def helper(dl_dy, x, arr_delta_w, arr_delta_b):
-            arr_delta_w.append(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)))
-            arr_delta_b.append(dl_dy)
+            arr_delta_w.append(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu())
+            arr_delta_b.append(dl_dy.cpu())
 
 
         ih.register_hook(lambda grad: helper(grad, input, self.ih_step, self.ih_bias_step))
