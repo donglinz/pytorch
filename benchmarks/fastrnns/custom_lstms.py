@@ -7,7 +7,8 @@ from collections import namedtuple
 from typing import List, Tuple
 from torch import Tensor
 import numbers
-
+import numpy as np
+import scipy.io
 '''
 Some helper classes for writing custom TorchScript LSTMs.
 
@@ -92,7 +93,7 @@ def reverse(lst):
 
 
 class LSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, input_size, hidden_size, layer=None):
         super(LSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -100,13 +101,68 @@ class LSTMCell(nn.Module):
         self.weight_hh = Parameter(torch.randn(4 * hidden_size, hidden_size))
         self.bias_ih = Parameter(torch.randn(4 * hidden_size))
         self.bias_hh = Parameter(torch.randn(4 * hidden_size))
+        
+        self.layer = layer
+
+        self.ih = []
+        self.ih_bias = []
+        self.ih_step = []
+        self.ih_bias_step = []
+
+        self.hh = []
+        self.hh_bias = []
+        self.hh_step = []
+        self.hh_bias_step= []
+
+
+        def helper_weight(cell, arr, grad):
+            arr.append(grad)
+            if len(cell.ih_step) == 200 and len(cell.hh_step) == 200 and \
+                len(cell.ih_bias_step) == 200 and len(cell.hh_bias_step) == 200 and \
+                len(cell.ih) == 200 and len(cell.ih_bias) == 200 and len(cell.hh) == 200 and len(cell.hh_bias) == 200:
+                mat_schema = {
+                    'ih': cell.ih,
+                    'ih_bias': cell.ih_bias,
+                    'ih_step': cell.ih_step,
+                    'ih_bias_step': cell.ih_bias_step,
+                    'hh': cell.hh,
+                    'hh_bias': cell.hh_bias,
+                    'hh_step': cell.hh_step,
+                    'hh_bias_step': cell.hh_bias_step
+                }
+
+                scipy.io.savemat(f'layer{cell.layer}gradient.mat', mat_schema)
+
+                cell.ih = None
+                cell.ih_bias = None
+                cell.ih_step = None
+                cell.ih_bias_step = None
+
+                cell.hh = None
+                cell.hh_bias = None
+                cell.hh_step = None
+                cell.hh_bias_step= None
+
+        self.weight_ih.register_hook(lambda grad: helper_weight(self, self.ih, grad))
+        self.bias_ih.register_hook(lambda grad: helper_weight(self, self.ih_bias, grad))
+        self.weight_hh.register_hook(lambda grad: helper_weight(self, self.hh, grad))
+        self.bias_hh.register_hook(lambda grad: helper_weight(self, self.hh_bias, grad))
+
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
-        gates = (torch.mm(input, self.weight_ih.t()) + self.bias_ih +
-                 torch.mm(hx, self.weight_hh.t()) + self.bias_hh)
+        ih = torch.mm(input, self.weight_ih.t()) + self.bias_ih
+        hh = torch.mm(hx, self.weight_hh.t()) + self.bias_hh
+        gates = (ih + hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+        def helper(dl_dy, x, arr_delta_w, arr_delta_b):
+            arr_delta_w.append(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)))
+            arr_delta_b.append(dl_dy)
+
+
+        ih.register_hook(lambda grad: helper(grad, input, self.ih_step, self.ih_bias_step))
+        hh.register_hook(lambda grad: helper(grad, hx, self.hh_step, self.hh_bias_step))
 
         ingate = torch.sigmoid(ingate)
         forgetgate = torch.sigmoid(forgetgate)
@@ -243,19 +299,26 @@ class BidirLSTMLayer(nn.Module):
 
 
 def init_stacked_lstm(num_layers, layer, first_layer_args, other_layer_args):
-    layers = [layer(*first_layer_args)] + [layer(*other_layer_args)
-                                           for _ in range(num_layers - 1)]
+    layers = [layer(*first_layer_args + [0])] + [layer(*other_layer_args + [i + 1])
+                                           for i in range(num_layers - 1)]
     return nn.ModuleList(layers)
 
 
 class StackedLSTM(nn.Module):
     __constants__ = ['layers']  # Necessary for iterating through self.layers
-
+ 
     def __init__(self, num_layers, layer, first_layer_args, other_layer_args):
         super(StackedLSTM, self).__init__()
         self.layers = init_stacked_lstm(num_layers, layer, first_layer_args,
                                         other_layer_args)
+        for layer in self.layers:
+            layer.register_forward_hook(self.layer_forward_hook)
+            layer.register_backward_hook(self.layer_backward_hook)
+    def layer_backward_hook(self, layer, input, output):
+        pass
 
+    def layer_forward_hook(self, layer, input, output):
+        pass
     def forward(self, input, states):
         # type: (Tensor, List[Tuple[Tensor, Tensor]]) -> Tuple[Tensor, List[Tuple[Tensor, Tensor]]]
         # List[LSTMState]: One state per layer
