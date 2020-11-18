@@ -114,6 +114,30 @@ class LSTMCell(nn.Module):
         self.hh_step = []
         self.hh_bias_step= []
 
+        self.i_grad = []
+        self.f_grad = []
+        self.c_grad = []
+        self.o_grad = []
+        self.cell_state_grad = []
+        self.hidden_state_grad = []
+
+        def clear_state(self):
+            self.ih = []
+            self.ih_bias = []
+            self.ih_step = []
+            self.ih_bias_step = []
+
+            self.hh = []
+            self.hh_bias = []
+            self.hh_step = []
+            self.hh_bias_step = []
+            
+            self.i_grad = []
+            self.f_grad = []
+            self.c_grad = []
+            self.o_grad = []
+            self.cell_state_grad = []
+            self.hidden_state_grad = []
 
         def helper_weight(cell, arr, grad):
             arr.append(grad.cpu())
@@ -126,28 +150,57 @@ class LSTMCell(nn.Module):
                 len(cell.hh) >=1 and \
                 len(cell.hh_bias) >=1:
                 assert len(cell.ih) == 1 and len(cell.ih_bias) == 1 and len(cell.hh) == 1 and len(cell.hh_bias) == 1
+                assert len(cell.i_grad) == 200 and len(cell.f_grad) == 200 and len(cell.c_grad) == 200 and len(cell.o_grad) == 200
+                assert len(cell.cell_state_grad) == 200 and len(cell.hidden_state_grad) == 200
+                
+                ih = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.ih_step]), axis=0), 4, axis=1)
+                hh = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.hh_step]), axis=0), 4, axis=1)
+                ib = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.ih_bias_step]), axis=0), 4, axis=1)
+                hb = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.hh_bias_step]), axis=0), 4, axis=1)
+                mat_schema = {
+                    'Wii': ih[0],
+                    'Wif': ih[1],
+                    'Wig': ih[2],
+                    'Wio': ih[3],
+                    'Whi': hh[0],
+                    'Whf': hh[1],
+                    'Whg': hh[2],
+                    'Who': hh[3],
+                    'bii': ib[0],
+                    'bif': ib[1],
+                    'big': ib[2],
+                    'bio': ib[3],
+                    'bhi': hb[0],
+                    'bhf': hb[1],
+                    'bhg': hb[2],
+                    'bho': hb[3],
+                    'i': np.sum(np.abs(cell.i_grad), axis=0),
+                    'f': np.sum(np.abs(cell.f_grad), axis=0),
+                    'g': np.sum(np.abs(cell.c_grad), axis=0),
+                    'o': np.sum(np.abs(cell.o_grad), axis=0),
+                    'c': np.sum(np.abs(cell.cell_state_grad), axis=0),
+                    'h': np.sum(np.abs(cell.hidden_state_grad), axis=0)
+                }
 
-                mat_schema = {}
-
-                mat_schema['ih'] = [tensor.numpy() for tensor in cell.ih]
-                cell.ih = []
-                mat_schema['ih_bias'] = [tensor.numpy() for tensor in cell.ih_bias]
-                cell.ih_bias = []
-                mat_schema['ih_step'] = [tensor.numpy() for tensor in cell.ih_step]
-                cell.ih_step = []
-                mat_schema['ih_bias_step'] = [tensor.numpy() for tensor in cell.ih_bias_step]
-                cell.ih_bias_step = []
-                mat_schema['hh'] =  [tensor.numpy() for tensor in cell.hh]
-                cell.hh = []
-                mat_schema['hh_bias'] = [tensor.numpy() for tensor in cell.hh_bias]
-                cell.hh_bias = []
-                mat_schema['hh_step'] = [tensor.numpy() for tensor in cell.hh_step]
-                cell.hh_step = []
-                mat_schema['hh_bias_step'] = [tensor.numpy() for tensor in cell.hh_bias_step]
-                cell.hh_bias_step = []
-                if cell.layer == 0:
-                    for arr in mat_schema:
-                        np.save(f'layer{cell.layer}_{arr}_grad.mat', mat_schema[arr])
+                scipy.io.savemat(f'layer{cell.layer}abs_sum_grad_each_timestamp.mat', mat_schema)
+                cell.clear_state()
+                # mat_schema['ih'] = [tensor.numpy() for tensor in cell.ih]
+                # cell.ih = []
+                # mat_schema['ih_bias'] = [tensor.numpy() for tensor in cell.ih_bias]
+                # cell.ih_bias = []
+                # mat_schema['ih_step'] = [tensor.numpy() for tensor in cell.ih_step]
+                # cell.ih_step = []
+                # mat_schema['ih_bias_step'] = [tensor.numpy() for tensor in cell.ih_bias_step]
+                # cell.ih_bias_step = []
+                # mat_schema['hh'] =  [tensor.numpy() for tensor in cell.hh]
+                # cell.hh = []
+                # mat_schema['hh_bias'] = [tensor.numpy() for tensor in cell.hh_bias]
+                # cell.hh_bias = []
+                # mat_schema['hh_step'] = [tensor.numpy() for tensor in cell.hh_step]
+                # cell.hh_step = []
+                # mat_schema['hh_bias_step'] = [tensor.numpy() for tensor in cell.hh_bias_step]
+                # cell.hh_bias_step = []
+                
 
 
 
@@ -176,9 +229,16 @@ class LSTMCell(nn.Module):
         forgetgate = torch.sigmoid(forgetgate)
         cellgate = torch.tanh(cellgate)
         outgate = torch.sigmoid(outgate)
-
+        
         cy = (forgetgate * cx) + (ingate * cellgate)
         hy = outgate * torch.tanh(cy)
+
+        ingate.register_hook(lambda grad: self.i_grad.append(grad.cpu().numpy()))
+        forgetgate.register_hook(lambda grad: self.f_grad.append(grad.cpu().numpy()))
+        cellgate.register_hook(lambda grad: self.c_grad.append(grad.cpu().numpy()))
+        outgate.register_hook(lambda grad: self.o_grad.append(grad.cpu().numpy()))
+        cy.register_hook(lambda grad: self.cell_state_grad.append(grad.cpu().numpy()))
+        hy.register_hook(lambda grad: self.hidden_state_grad.append(grad.cpu().numpy()))
 
         return hy, (hy, cy), [ingate.detach().cpu().numpy(), 
         forgetgate.detach().cpu().numpy(), 
