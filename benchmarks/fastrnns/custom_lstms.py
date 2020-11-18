@@ -117,31 +117,38 @@ class LSTMCell(nn.Module):
 
         def helper_weight(cell, arr, grad):
             arr.append(grad)
-            if len(cell.ih_step) == 200 and len(cell.hh_step) == 200 and \
-                len(cell.ih_bias_step) == 200 and len(cell.hh_bias_step) == 200 and \
-                len(cell.ih) == 200 and len(cell.ih_bias) == 200 and len(cell.hh) == 200 and len(cell.hh_bias) == 200:
-                mat_schema = {
-                    'ih': cell.ih,
-                    'ih_bias': cell.ih_bias,
-                    'ih_step': cell.ih_step,
-                    'ih_bias_step': cell.ih_bias_step,
-                    'hh': cell.hh,
-                    'hh_bias': cell.hh_bias,
-                    'hh_step': cell.hh_step,
-                    'hh_bias_step': cell.hh_bias_step
-                }
+            if len(cell.ih_step) == 200 and  \
+                len(cell.ih_bias_step) == 200 and  \
+                len(cell.ih) >= 1 and \
+                len(cell.ih_bias) >= 1 and \
+                len(cell.hh_step) == 200 and \
+                len(cell.hh_bias_step) == 200 and \
+                len(cell.hh) >=1 and \
+                len(cell.hh_bias) >=1:
+                assert len(cell.ih) == 1 and len(cell.ih_bias) == 1 and len(cell.hh) == 1 and len(cell.hh_bias) == 1
 
-                scipy.io.savemat(f'layer{cell.layer}gradient.mat', mat_schema)
+                mat_schema = {}
 
-                cell.ih = None
-                cell.ih_bias = None
-                cell.ih_step = None
-                cell.ih_bias_step = None
+                mat_schema['ih'] = [tensor.numpy() for tensor in cell.ih]
+                cell.ih = []
+                mat_schema['ih_bias'] = [tensor.numpy() for tensor in cell.ih_bias]
+                cell.ih_bias = []
+                mat_schema['ih_step'] = [tensor.numpy() for tensor in cell.ih_step]
+                cell.ih_step = []
+                mat_schema['ih_bias_step'] = [tensor.numpy() for tensor in cell.ih_bias_step]
+                cell.ih_bias_step = []
+                mat_schema['hh'] =  [tensor.numpy() for tensor in cell.hh]
+                cell.hh = []
+                mat_schema['hh_bias'] = [tensor.numpy() for tensor in cell.hh_bias]
+                cell.hh_bias = []
+                mat_schema['hh_step'] = [tensor.numpy() for tensor in cell.hh_step]
+                cell.hh_step = []
+                mat_schema['hh_bias_step'] = [tensor.numpy() for tensor in cell.hh_bias_step]
+                cell.hh_bias_step= []
+                cell.layer == 0:
+                    scipy.io.savemat(f'layer{cell.layer}gradient.mat', mat_schema)
 
-                cell.hh = None
-                cell.hh_bias = None
-                cell.hh_step = None
-                cell.hh_bias_step= None
+
 
         self.weight_ih.register_hook(lambda grad: helper_weight(self, self.ih, grad))
         self.bias_ih.register_hook(lambda grad: helper_weight(self, self.ih_bias, grad))
