@@ -121,24 +121,6 @@ class LSTMCell(nn.Module):
         self.cell_state_grad = []
         self.hidden_state_grad = []
 
-        def clear_state(self):
-            self.ih = []
-            self.ih_bias = []
-            self.ih_step = []
-            self.ih_bias_step = []
-
-            self.hh = []
-            self.hh_bias = []
-            self.hh_step = []
-            self.hh_bias_step = []
-            
-            self.i_grad = []
-            self.f_grad = []
-            self.c_grad = []
-            self.o_grad = []
-            self.cell_state_grad = []
-            self.hidden_state_grad = []
-
         def helper_weight(cell, arr, grad):
             arr.append(grad.cpu())
             if len(cell.ih_step) == 200 and  \
@@ -208,7 +190,24 @@ class LSTMCell(nn.Module):
         self.bias_ih.register_hook(lambda grad: helper_weight(self, self.ih_bias, grad))
         self.weight_hh.register_hook(lambda grad: helper_weight(self, self.hh, grad))
         self.bias_hh.register_hook(lambda grad: helper_weight(self, self.hh_bias, grad))
+        
+    def clear_state(self):
+        self.ih = []
+        self.ih_bias = []
+        self.ih_step = []
+        self.ih_bias_step = []
 
+        self.hh = []
+        self.hh_bias = []
+        self.hh_step = []
+        self.hh_bias_step = []
+        
+        self.i_grad = []
+        self.f_grad = []
+        self.c_grad = []
+        self.o_grad = []
+        self.cell_state_grad = []
+        self.hidden_state_grad = []
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
