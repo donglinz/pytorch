@@ -144,9 +144,10 @@ class LSTMCell(nn.Module):
                 mat_schema['hh_step'] = [tensor.numpy() for tensor in cell.hh_step]
                 cell.hh_step = []
                 mat_schema['hh_bias_step'] = [tensor.numpy() for tensor in cell.hh_bias_step]
-                cell.hh_bias_step= []
+                cell.hh_bias_step = []
                 if cell.layer == 0:
-                    scipy.io.savemat(f'layer{cell.layer}gradient.mat', mat_schema)
+                    for arr, val in mat_schema:
+                        np.save(f'layer{cell.layer}_{arr}_grad.mat', val)
 
 
 
