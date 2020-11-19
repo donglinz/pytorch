@@ -135,33 +135,13 @@ class LSTMCell(nn.Module):
                 assert len(cell.i_grad) == 200 and len(cell.f_grad) == 200 and len(cell.c_grad) == 200 and len(cell.o_grad) == 200
                 assert len(cell.cell_state_grad) == 200 and len(cell.hidden_state_grad) == 200
                 
-                ih = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.ih_step]), axis=0), 4, axis=1)
-                hh = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.hh_step]), axis=0), 4, axis=1)
+                ih = np.sum(np.abs([tensor.numpy() for tensor in cell.ih_step]), axis=(2,3))
+                hh = np.sum(np.abs([tensor.numpy() for tensor in cell.hh_step]), axis=(2,3))
                 ib = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.ih_bias_step]), axis=0), 4, axis=1)
                 hb = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.hh_bias_step]), axis=0), 4, axis=1)
                 mat_schema = {
-                    'Wii': ih[0],
-                    'Wif': ih[1],
-                    'Wig': ih[2],
-                    'Wio': ih[3],
-                    'Whi': hh[0],
-                    'Whf': hh[1],
-                    'Whg': hh[2],
-                    'Who': hh[3],
-                    'bii': ib[0],
-                    'bif': ib[1],
-                    'big': ib[2],
-                    'bio': ib[3],
-                    'bhi': hb[0],
-                    'bhf': hb[1],
-                    'bhg': hb[2],
-                    'bho': hb[3],
-                    'i': np.sum(np.abs(cell.i_grad), axis=0),
-                    'f': np.sum(np.abs(cell.f_grad), axis=0),
-                    'g': np.sum(np.abs(cell.c_grad), axis=0),
-                    'o': np.sum(np.abs(cell.o_grad), axis=0),
-                    'c': np.sum(np.abs(cell.cell_state_grad), axis=0),
-                    'h': np.sum(np.abs(cell.hidden_state_grad), axis=0)
+                    'Wih': ih,
+                    'Whh': hh
                 }
 
                 scipy.io.savemat(f'layer{cell.layer}abs_sum_grad_each_timestamp.mat', mat_schema)
