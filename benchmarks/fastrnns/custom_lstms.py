@@ -103,49 +103,49 @@ class LSTMCell(nn.Module):
         self.bias_hh = Parameter(torch.randn(4 * hidden_size))
         
         self.layer = layer
+        self.weight_per_step = []
+        # self.ih = []
+        # self.ih_bias = []
+        # self.ih_step = []
+        # self.ih_bias_step = []
 
-        self.ih = []
-        self.ih_bias = []
-        self.ih_step = []
-        self.ih_bias_step = []
+        # self.hh = []
+        # self.hh_bias = []
+        # self.hh_step = []
+        # self.hh_bias_step= []
 
-        self.hh = []
-        self.hh_bias = []
-        self.hh_step = []
-        self.hh_bias_step= []
+        # self.i_grad = []
+        # self.f_grad = []
+        # self.c_grad = []
+        # self.o_grad = []
+        # self.cell_state_grad = []
+        # self.hidden_state_grad = []
 
-        self.i_grad = []
-        self.f_grad = []
-        self.c_grad = []
-        self.o_grad = []
-        self.cell_state_grad = []
-        self.hidden_state_grad = []
-
-        def helper_weight(cell, arr, grad):
-            arr.append(grad.cpu())
-            if len(cell.ih_step) == 200 and  \
-                len(cell.ih_bias_step) == 200 and  \
-                len(cell.ih) >= 1 and \
-                len(cell.ih_bias) >= 1 and \
-                len(cell.hh_step) == 200 and \
-                len(cell.hh_bias_step) == 200 and \
-                len(cell.hh) >=1 and \
-                len(cell.hh_bias) >=1:
-                assert len(cell.ih) == 1 and len(cell.ih_bias) == 1 and len(cell.hh) == 1 and len(cell.hh_bias) == 1
-                assert len(cell.i_grad) == 200 and len(cell.f_grad) == 200 and len(cell.c_grad) == 200 and len(cell.o_grad) == 200
-                assert len(cell.cell_state_grad) == 200 and len(cell.hidden_state_grad) == 200
+        # def helper_weight(cell, arr, grad):
+        #     arr.append(grad.cpu())
+        #     if len(cell.ih_step) == 200 and  \
+        #         len(cell.ih_bias_step) == 200 and  \
+        #         len(cell.ih) >= 1 and \
+        #         len(cell.ih_bias) >= 1 and \
+        #         len(cell.hh_step) == 200 and \
+        #         len(cell.hh_bias_step) == 200 and \
+        #         len(cell.hh) >=1 and \
+        #         len(cell.hh_bias) >=1:
+        #         assert len(cell.ih) == 1 and len(cell.ih_bias) == 1 and len(cell.hh) == 1 and len(cell.hh_bias) == 1
+        #         assert len(cell.i_grad) == 200 and len(cell.f_grad) == 200 and len(cell.c_grad) == 200 and len(cell.o_grad) == 200
+        #         assert len(cell.cell_state_grad) == 200 and len(cell.hidden_state_grad) == 200
                 
-                ih = np.sum(np.abs([tensor.numpy() for tensor in cell.ih_step]), axis=(2,3))
-                hh = np.sum(np.abs([tensor.numpy() for tensor in cell.hh_step]), axis=(2,3))
-                ib = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.ih_bias_step]), axis=0), 4, axis=1)
-                hb = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.hh_bias_step]), axis=0), 4, axis=1)
-                mat_schema = {
-                    'Wih': ih,
-                    'Whh': hh
-                }
+        #         ih = np.sum(np.abs([tensor.numpy() for tensor in cell.ih_step]), axis=(2,3))
+        #         hh = np.sum(np.abs([tensor.numpy() for tensor in cell.hh_step]), axis=(2,3))
+        #         ib = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.ih_bias_step]), axis=0), 4, axis=1)
+        #         hb = np.split(np.sum(np.abs([tensor.numpy() for tensor in cell.hh_bias_step]), axis=0), 4, axis=1)
+        #         mat_schema = {
+        #             'Wih': ih,
+        #             'Whh': hh
+        #         }
 
-                scipy.io.savemat(f'layer{cell.layer}abs_sum_grad_each_timestamp.mat', mat_schema)
-                cell.clear_state()
+        #         scipy.io.savemat(f'layer{cell.layer}abs_sum_grad_each_timestamp.mat', mat_schema)
+        #         cell.clear_state()
                 # mat_schema['ih'] = [tensor.numpy() for tensor in cell.ih]
                 # cell.ih = []
                 # mat_schema['ih_bias'] = [tensor.numpy() for tensor in cell.ih_bias]
@@ -166,28 +166,28 @@ class LSTMCell(nn.Module):
 
 
 
-        self.weight_ih.register_hook(lambda grad: helper_weight(self, self.ih, grad))
-        self.bias_ih.register_hook(lambda grad: helper_weight(self, self.ih_bias, grad))
-        self.weight_hh.register_hook(lambda grad: helper_weight(self, self.hh, grad))
-        self.bias_hh.register_hook(lambda grad: helper_weight(self, self.hh_bias, grad))
+        # self.weight_ih.register_hook(lambda grad: helper_weight(self, self.ih, grad))
+        # self.bias_ih.register_hook(lambda grad: helper_weight(self, self.ih_bias, grad))
+        # self.weight_hh.register_hook(lambda grad: helper_weight(self, self.hh, grad))
+        # self.bias_hh.register_hook(lambda grad: helper_weight(self, self.hh_bias, grad))
         
-    def clear_state(self):
-        self.ih = []
-        self.ih_bias = []
-        self.ih_step = []
-        self.ih_bias_step = []
+    # def clear_state(self):
+    #     self.ih = []
+    #     self.ih_bias = []
+    #     self.ih_step = []
+    #     self.ih_bias_step = []
 
-        self.hh = []
-        self.hh_bias = []
-        self.hh_step = []
-        self.hh_bias_step = []
+    #     self.hh = []
+    #     self.hh_bias = []
+    #     self.hh_step = []
+    #     self.hh_bias_step = []
         
-        self.i_grad = []
-        self.f_grad = []
-        self.c_grad = []
-        self.o_grad = []
-        self.cell_state_grad = []
-        self.hidden_state_grad = []
+    #     self.i_grad = []
+    #     self.f_grad = []
+    #     self.c_grad = []
+    #     self.o_grad = []
+    #     self.cell_state_grad = []
+    #     self.hidden_state_grad = []
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
@@ -196,13 +196,13 @@ class LSTMCell(nn.Module):
         hh = torch.mm(hx, self.weight_hh.t()) + self.bias_hh
         gates = (ih + hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
-        def helper(dl_dy, x, arr_delta_w, arr_delta_b):
-            arr_delta_w.append(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu())
-            arr_delta_b.append(dl_dy.cpu())
+        def helper(dl_dy, x, arr):
+            # arr_delta_w.append(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu())
+            # arr_delta_b.append(dl_dy.cpu())
+            arr.append(np.sum(np.abs(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu().numpy())) / 4)
 
-
-        ih.register_hook(lambda grad: helper(grad, input, self.ih_step, self.ih_bias_step))
-        hh.register_hook(lambda grad: helper(grad, hx, self.hh_step, self.hh_bias_step))
+        # ih.register_hook(lambda grad: helper(grad, input, self))
+        hh.register_hook(lambda grad: helper(grad, hx, self.weight_per_step))
 
         ingate = torch.sigmoid(ingate)
         forgetgate = torch.sigmoid(forgetgate)
@@ -212,12 +212,12 @@ class LSTMCell(nn.Module):
         cy = (forgetgate * cx) + (ingate * cellgate)
         hy = outgate * torch.tanh(cy)
 
-        ingate.register_hook(lambda grad: self.i_grad.append(grad.cpu().numpy()))
-        forgetgate.register_hook(lambda grad: self.f_grad.append(grad.cpu().numpy()))
-        cellgate.register_hook(lambda grad: self.c_grad.append(grad.cpu().numpy()))
-        outgate.register_hook(lambda grad: self.o_grad.append(grad.cpu().numpy()))
-        cy.register_hook(lambda grad: self.cell_state_grad.append(grad.cpu().numpy()))
-        hy.register_hook(lambda grad: self.hidden_state_grad.append(grad.cpu().numpy()))
+        # ingate.register_hook(lambda grad: self.i_grad.append(grad.cpu().numpy()))
+        # forgetgate.register_hook(lambda grad: self.f_grad.append(grad.cpu().numpy()))
+        # cellgate.register_hook(lambda grad: self.c_grad.append(grad.cpu().numpy()))
+        # outgate.register_hook(lambda grad: self.o_grad.append(grad.cpu().numpy()))
+        # cy.register_hook(lambda grad: self.cell_state_grad.append(grad.cpu().numpy()))
+        # hy.register_hook(lambda grad: self.hidden_state_grad.append(grad.cpu().numpy()))
 
         return hy, (hy, cy), [ingate.detach().cpu().numpy(), 
         forgetgate.detach().cpu().numpy(), 
