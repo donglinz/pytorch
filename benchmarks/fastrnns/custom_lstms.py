@@ -199,7 +199,7 @@ class LSTMCell(nn.Module):
         def helper(dl_dy, x, arr):
             # arr_delta_w.append(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu())
             # arr_delta_b.append(dl_dy.cpu())
-            arr.append(np.sum(np.abs(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu().numpy())) / 4)
+            arr.append(np.sum(np.abs(torch.matmul(dl_dy.unsqueeze(2), x.unsqueeze(1)).cpu().numpy()), axis=(1,2)) / 4)
 
         # ih.register_hook(lambda grad: helper(grad, input, self))
         hh.register_hook(lambda grad: helper(grad, hx, self.weight_per_step))
